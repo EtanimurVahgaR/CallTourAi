@@ -191,6 +191,78 @@ python -m rag.run_rag "..."
 - Your `GEMINI_LLM_MODEL` doesn’t match what your key supports.
 - Run the model list command above and set `GEMINI_LLM_MODEL` to one of the returned names (without the `models/` prefix).
 
+## Level 1 upgrade: Real-time voice -> RAG
+
+This project includes a “Level 1” streaming voice pipeline:
+
+Mic (32ms frames) → Silero VAD (speech gate) → Faster-Whisper (transcribe) → LangGraph RAG.
+
+### Install voice dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+Linux note: `sounddevice` may require PortAudio system libs. On Ubuntu/Debian:
+
+```bash
+sudo apt-get update && sudo apt-get install -y portaudio19-dev
+```
+
+### Run
+
+```bash
+python voice_rag.py
+```
+
+WSL note: live microphone capture often does not work in WSL because the Linux VM can’t see your Windows microphone devices (PortAudio reports no input devices). If you hit this, use either “File mode” or the “Browser mic” option below.
+
+Useful flags (live mic):
+
+- `--list-devices` (print available audio devices)
+- `--mic 3` (select input device index)
+- `--mic "USB"` (select by name substring)
+- `--vad-threshold 0.5` (increase to ~0.65 in noisy rooms)
+- `--end-silence-ms 500` (end-of-sentence trigger)
+- `--model large-v3-turbo`
+
+Example:
+
+```bash
+python voice_rag.py --vad-threshold 0.55 --end-silence-ms 500 --model large-v3-turbo
+```
+
+Notes:
+
+- The script keeps a ~100ms pre-roll so the first syllable isn’t cut off.
+- If you have CUDA, it will auto-select `device=cuda` and `compute=float16`.
+
+### File mode (works anywhere)
+
+If you can’t access a microphone (common on WSL), record an audio clip and run:
+
+```bash
+python voice_rag.py --audio-file path/to/clip.wav
+```
+
+### WSL-friendly alternative: Browser mic -> backend -> RAG
+
+If WSL can’t see your microphone devices, you can still do “live” voice by capturing audio in your Windows browser and sending it to a WSL backend.
+
+Start the web app in WSL:
+
+```bash
+python web_voice_rag.py
+```
+
+Then open (on Windows) in your browser:
+
+- `http://localhost:5000`
+
+Record → Stop → Send to RAG.
+
+This option uses a small Flask server in WSL plus a static HTML page. The browser records audio, converts it to a 16kHz mono WAV, uploads it to the backend, and the backend runs Faster-Whisper + RAG.
+
 ## Project layout
 
 - `rag/graph.py`: LangGraph wiring
@@ -198,3 +270,6 @@ python -m rag.run_rag "..."
 - `rag/ingest.py`: ingestion pipeline
 - `rag/settings.py`: env-backed config
 - `rag/vectorstore.py`: Chroma local/http/cloud connector
+- `voice_rag.py`: live mic (when available) + `--audio-file` mode
+- `web_voice_rag.py`: Flask server for browser mic uploads (WSL-friendly)
+- `web/templates/index.html`: simple browser UI

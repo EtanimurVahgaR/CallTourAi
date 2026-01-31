@@ -7,4 +7,13 @@ chromadb
 langchain-chroma
 python-dotenv
 
+# Web mic UI (browser records audio, backend transcribes + runs RAG)
+flask
+
 langchain-google-genai
+
+# Level 1 voice pipeline (mic -> VAD -> faster-whisper)
+numpy
+sounddevice
+torch
+faster-whisper

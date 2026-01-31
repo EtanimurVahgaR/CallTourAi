@@ -61,4 +61,21 @@ def generate(state: AgentState):
 
     print(_yellow(f"[RAG] Using LLM: {_llm_label()}"))
     response = llm.invoke(prompt)
-    return {"answer": response.content}
+
+    def _to_text(value) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        if isinstance(value, (list, tuple)):
+            return "\n".join(_to_text(v) for v in value).strip()
+        if isinstance(value, dict):
+            try:
+                import json
+
+                return json.dumps(value, ensure_ascii=False)
+            except Exception:
+                return str(value)
+        return str(value)
+
+    return {"answer": _to_text(getattr(response, "content", response))}
