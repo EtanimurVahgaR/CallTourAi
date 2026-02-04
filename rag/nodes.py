@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import List
 
 from .providers import get_embeddings, get_llm
@@ -25,9 +26,15 @@ def _llm_label() -> str:
     return f"ollama/{_settings.llm_model}"
 
 
+@lru_cache(maxsize=1)
 def _get_vectorstore():
     embeddings = get_embeddings(_settings)
     return get_vectorstore(settings=_settings, embeddings=embeddings)
+
+
+@lru_cache(maxsize=1)
+def _get_llm():
+    return get_llm(_settings)
 
 
 def retrieve(state: AgentState):
@@ -56,7 +63,7 @@ def generate(state: AgentState):
     question = state["question"]
     context = state.get("context", [])
 
-    llm = get_llm(_settings)
+    llm = _get_llm()
     prompt = _format_prompt(question=question, context=context)
 
     print(_yellow(f"[RAG] Using LLM: {_llm_label()}"))

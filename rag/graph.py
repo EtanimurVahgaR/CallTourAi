@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import lru_cache
+
 from langgraph.graph import END, START, StateGraph
 
 from .nodes import generate, retrieve
@@ -17,3 +19,8 @@ def build_app():
     workflow.add_edge("generate_node", END)
 
     return workflow.compile()
+
+
+@lru_cache(maxsize=1)
+def get_app():
+    return build_app()

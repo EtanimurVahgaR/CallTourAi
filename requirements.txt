@@ -7,8 +7,15 @@ chromadb
 langchain-chroma
 python-dotenv
 
-# Web mic UI (browser records audio, backend transcribes + runs RAG)
-flask
+# LiveKit voice agent
+livekit-agents[mcp]>=1.2.0
+livekit-plugins-google>=1.0.0
+livekit-plugins-silero>=1.0.0
+
+# Web mic UI + token server (WSL-friendly browser microphone via LiveKit)
+fastapi
+uvicorn[standard]
+jinja2
 
 langchain-google-genai
 

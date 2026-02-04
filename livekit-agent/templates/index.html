@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CallTourAI LiveKit Mic (WSL-friendly)</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial; margin: 24px; background: #0b1220; color: #e8eefc; }
+      .card { max-width: 880px; background: #0f1a33; border: 1px solid #1e2a4a; border-radius: 12px; padding: 18px; }
+      h1 { margin: 0 0 10px 0; font-size: 20px; }
+      p { margin: 8px 0; color: #b9c6e4; }
+      .row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+      label { display: grid; gap: 6px; font-size: 13px; }
+      input { background: #0b1220; border: 1px solid #26365f; color: #e8eefc; border-radius: 10px; padding: 10px 12px; min-width: 240px; }
+      button { background: #2b5cff; border: 0; color: white; padding: 10px 14px; border-radius: 10px; cursor: pointer; font-weight: 600; }
+      button.secondary { background: #26365f; }
+      button:disabled { opacity: 0.6; cursor: not-allowed; }
+      .status { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: #0b1220; border: 1px solid #26365f; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; white-space: pre-wrap; }
+      .hint { margin-top: 10px; font-size: 12px; color: #b9c6e4; }
+      a { color: #8fb3ff; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>CallTourAI LiveKit Mic (WSL-friendly)</h1>
+      <p>
+        Use this page to capture your microphone audio in the browser and send it to LiveKit.
+        Your agent running in WSL will receive the audio over the network.
+      </p>
+
+      <div class="row">
+        <label>
+          Room
+          <input id="room" value="{{ default_room }}" />
+        </label>
+        <label>
+          Identity
+          <input id="identity" value="{{ default_identity }}" />
+        </label>
+        <label>
+          Microphone
+          <input id="mic" list="miclist" placeholder="default" />
+          <datalist id="miclist"></datalist>
+        </label>
+      </div>
+
+      <div class="row" style="margin-top: 14px;">
+        <button id="join">Join (mic)</button>
+        <button id="leave" class="secondary" disabled>Leave</button>
+        <button id="refresh" class="secondary">Refresh mics</button>
+      </div>
+
+      <div class="status" id="status">Idle</div>
+      <div class="hint">
+        Note: Microphone access requires a secure context. <code>http://localhost</code> counts as secure.
+      </div>
+    </div>
+
+    <script>
+      const LIVEKIT_CDN_URLS = [
+        'https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js',
+        'https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js',
+      ];
+
+      const statusEl = document.getElementById('status');
+      const joinBtn = document.getElementById('join');
+      const leaveBtn = document.getElementById('leave');
+      const refreshBtn = document.getElementById('refresh');
+      const roomEl = document.getElementById('room');
+      const identityEl = document.getElementById('identity');
+      const micEl = document.getElementById('mic');
+      const micListEl = document.getElementById('miclist');
+
+      let lkRoom = null;
+      let lastFailure = '';
+
+      function setStatus(msg) {
+        statusEl.textContent = msg;
+      }
+
+      function safeJson(obj) {
+        try { return JSON.stringify(obj, null, 2); } catch { return String(obj); }
+      }
+
+      function getLiveKitGlobal() {
+        return window.LiveKitClient || window.livekit || window.LivekitClient || window.LiveKit;
+      }
+
+      async function populateMicList() {
+        if (!navigator.mediaDevices?.enumerateDevices) {
+          setStatus('This browser does not support media device enumeration.');
+          return;
+        }
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const mics = devices.filter(d => d.kind === 'audioinput');
+
+        micListEl.innerHTML = '';
+        for (const d of mics) {
+          const opt = document.createElement('option');
+          // datalist uses value only; keep label in value for usability
+          opt.value = d.label || d.deviceId;
+          opt.dataset.deviceId = d.deviceId;
+          micListEl.appendChild(opt);
+        }
+
+        if (mics.length === 0) {
+          setStatus('No microphone devices detected by the browser. Check Windows sound settings + browser permissions.');
+        }
+      }
+
+      function resolveMicDeviceId() {
+        const typed = (micEl.value || '').trim();
+        if (!typed || typed.toLowerCase() === 'default') return undefined;
+
+        // If user selected from datalist, match by label value.
+        for (const opt of micListEl.querySelectorAll('option')) {
+          if (opt.value === typed) return opt.dataset.deviceId;
+        }
+
+        // Otherwise assume they pasted a deviceId.
+        return typed;
+      }
+
+      async function loadScript(src) {
+        return new Promise((resolve, reject) => {
+          const el = document.createElement('script');
+          el.src = src;
+          el.async = true;
+          el.onload = () => resolve(true);
+          el.onerror = () => reject(new Error(`Failed to load ${src}`));
+          document.head.appendChild(el);
+        });
+      }
+
+      async function ensureLiveKitLoaded() {
+        if (getLiveKitGlobal()) return true;
+
+        for (const src of LIVEKIT_CDN_URLS) {
+          try {
+            setStatus(`Loading LiveKit client...\n${src}`);
+            await loadScript(src);
+            if (getLiveKitGlobal()) return true;
+          } catch (e) {
+            // try next
+          }
+        }
+
+        return false;
+      }
+
+      async function fetchToken(room, identity) {
+        const qs = new URLSearchParams({ room, identity });
+        const res = await fetch(`/token?${qs.toString()}`);
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Token request failed (${res.status}): ${text}`);
+        }
+        return await res.json();
+      }
+
+      async function join() {
+        joinBtn.disabled = true;
+        lastFailure = '';
+        const ok = await ensureLiveKitLoaded();
+        const LK = getLiveKitGlobal();
+        if (!ok || !LK) {
+          joinBtn.disabled = false;
+          setStatus(
+            'LiveKit client library failed to load.\n' +
+            'Likely a network/adblock issue reaching CDN.\n\n' +
+            'Check DevTools -> Network for livekit-client.umd.min.js and any blocked requests.\n' +
+            'If your network blocks CDNs, tell me and I will switch to self-hosting the JS from this FastAPI server.'
+          );
+          return;
+        }
+
+        const roomName = roomEl.value.trim();
+        const identity = identityEl.value.trim();
+        if (!roomName || !identity) {
+          setStatus('Room and identity are required');
+          joinBtn.disabled = false;
+          return;
+        }
+
+        // Request microphone permission up-front (also makes device labels available).
+        try {
+          setStatus('Requesting microphone permission...');
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          // close immediately; LiveKit will open its own stream
+          stream.getTracks().forEach(t => t.stop());
+        } catch (e) {
+          lastFailure = `Microphone permission/device error: ${String(e)}`;
+          setStatus(lastFailure);
+          joinBtn.disabled = false;
+          return;
+        }
+
+        try {
+          await populateMicList();
+        } catch (e) {
+          // Not fatal.
+        }
+
+        setStatus('Requesting token...');
+
+        let info;
+        try {
+          info = await fetchToken(roomName, identity);
+        } catch (e) {
+          joinBtn.disabled = false;
+          setStatus(String(e));
+          return;
+        }
+
+        setStatus(`Connecting to LiveKit...\n${safeJson({ url: info.url, room: info.room, identity: info.identity })}`);
+
+        lkRoom = new LK.Room({
+          adaptiveStream: true,
+          dynacast: true,
+        });
+
+        lkRoom
+          .on(LK.RoomEvent.ConnectionStateChanged, (state) => {
+            setStatus(`Connection state: ${state}`);
+          })
+          .on(LK.RoomEvent.Reconnecting, () => {
+            setStatus('Reconnecting...');
+          })
+          .on(LK.RoomEvent.Reconnected, () => {
+            setStatus('Reconnected');
+          })
+          .on(LK.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+            if (track.kind === 'audio') {
+              const element = track.attach();
+              element.autoplay = true;
+              document.body.appendChild(element);
+              setStatus(`Subscribed to audio from ${participant.identity}`);
+            }
+          })
+          .on(LK.RoomEvent.Disconnected, (reason) => {
+            const base = reason ? `Disconnected: ${reason}` : 'Disconnected';
+            setStatus(lastFailure ? `${lastFailure}\n\n${base}` : base);
+            joinBtn.disabled = false;
+            leaveBtn.disabled = true;
+            lkRoom = null;
+          });
+
+        try {
+          await lkRoom.connect(info.url, info.token);
+          setStatus('Connected. Publishing microphone...');
+
+          const deviceId = resolveMicDeviceId();
+          const track = await LK.createLocalAudioTrack(deviceId ? { deviceId } : undefined);
+          await lkRoom.localParticipant.publishTrack(track);
+
+          setStatus(`Microphone publishing enabled${deviceId ? ' (selected device)' : ''}. Talk now.`);
+          leaveBtn.disabled = false;
+        } catch (e) {
+          lastFailure = `Connect/publish failed: ${String(e)}`;
+          setStatus(lastFailure);
+          joinBtn.disabled = false;
+          leaveBtn.disabled = true;
+          try { await lkRoom.disconnect(); } catch {}
+          lkRoom = null;
+        }
+      }
+
+      async function leave() {
+        leaveBtn.disabled = true;
+        if (lkRoom) {
+          setStatus('Leaving...');
+          try { await lkRoom.disconnect(); } catch {}
+          lkRoom = null;
+        }
+        setStatus('Idle');
+        joinBtn.disabled = false;
+      }
+
+      joinBtn.addEventListener('click', join);
+      leaveBtn.addEventListener('click', leave);
+      refreshBtn.addEventListener('click', async () => {
+        try {
+          await populateMicList();
+          setStatus('Refreshed microphone list.');
+        } catch (e) {
+          setStatus(`Failed to refresh mic list: ${String(e)}`);
+        }
+      });
+
+      // Best-effort initial population (labels may be empty until permission is granted).
+      populateMicList().catch(() => {});
+    </script>
+  </body>
+</html>

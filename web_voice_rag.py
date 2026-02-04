@@ -40,9 +40,9 @@ def _transcribe_file(stt_model, path: str, beam_size: int) -> str:
 
 
 def _run_rag(question: str) -> str:
-    from rag.graph import build_app
+    from rag.graph import get_app
 
-    app = build_app()
+    app = get_app()
     result = app.invoke({"question": question})
     return result.get("answer", "")
 
@@ -145,7 +145,7 @@ def main() -> int:
         )
     )
 
-    app.run(host=args.host, port=args.port, debug=False)
+    app.run(host=args.host, port=args.port, debug=False, threaded=True, use_reloader=False)
     return 0
 
 

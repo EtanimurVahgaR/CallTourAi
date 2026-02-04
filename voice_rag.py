@@ -86,9 +86,9 @@ def _transcribe(
 
 
 def _run_rag(question: str) -> str:
-    from rag.graph import build_app
+    from rag.graph import get_app
 
-    app = build_app()
+    app = get_app()
     result = app.invoke({"question": question})
     return result.get("answer", "")
 

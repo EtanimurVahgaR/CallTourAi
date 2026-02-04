@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "calltourai_rag": "rag.graph:build_app"
+  },
+  "env": ".env"
+}
