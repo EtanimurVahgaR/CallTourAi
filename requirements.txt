@@ -19,6 +19,10 @@ jinja2
 
 langchain-google-genai
 
+# Persistent agent memory (PostgreSQL)
+SQLAlchemy>=2.0
+psycopg2-binary>=2.9
+
 # Level 1 voice pipeline (mic -> VAD -> faster-whisper)
 numpy
 sounddevice

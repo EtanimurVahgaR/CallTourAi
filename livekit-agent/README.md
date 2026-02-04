@@ -36,6 +36,25 @@ Optional (only if connecting to a LiveKit server):
 - `LIVEKIT_API_KEY`
 - `LIVEKIT_API_SECRET`
 
+### Persistent memory (PostgreSQL)
+
+If you set `DATABASE_URL`, the agent will persist a **text-only** chat history
+to PostgreSQL and restore it when it reconnects to the same room.
+
+In `livekit-agent/.env`:
+
+```dotenv
+DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/calltourai
+MEMORY_MAX_ITEMS=200
+MEMORY_SCOPE=room
+```
+
+Notes:
+- `MEMORY_SCOPE=room` stores memory per room name (recommended).
+- `MEMORY_SCOPE=room_user` scopes memory by `(room_name, user_identity)`. For
+	this to work across reconnects, your client must rejoin with the **same**
+	LiveKit token identity.
+
 ## 3) Download model files (first run)
 
 LiveKit Agents uses model files for VAD / turn detection depending on plugins.
