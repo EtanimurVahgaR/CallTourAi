@@ -74,7 +74,7 @@ This is the recommended approach in WSL: the microphone is captured by your Wind
 2) Start the web helper (token endpoint + simple UI):
 
 ```bash
-./livekit-agent/run_web.sh
+python -m uvicorn livekit_web_server:app --app-dir livekit-agent --host 0.0.0.0 --port 8000 --reload
 ```
 
 Open `http://localhost:8000` in your Windows browser.
@@ -85,7 +85,17 @@ Open `http://localhost:8000` in your Windows browser.
 python livekit-agent/livekit_basic_agent.py connect --room calltour
 ```
 
+If you prefer a different identity:
+
+```bash
+python livekit-agent/livekit_basic_agent.py connect --room calltour --participant-identity agent
+```
+
 Talk in the browser — the agent should respond with audio.
+
+Note: if you leave the room and rejoin, the agent should still respond. If you
+observe the agent going silent after a disconnect/reconnect, ensure you're using
+the updated agent code that disables `user_away_timeout`.
 
 ### Worker mode (advanced)
 
