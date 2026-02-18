@@ -1,0 +1,43 @@
+CallTourAI Travel KB — Car Rentals (Dubai)
+
+Use this as a demo knowledge base for RAG queries about rental cars and policies.
+
+RENTAL OPTIONS (example inventory)
+- Category: Economy
+  Example models: Toyota Yaris (or similar)
+  Seats/bags: 4 seats / 2 bags
+  Typical price: 120–170 AED/day
+  Deposit: 1500 AED
+
+- Category: Compact SUV
+  Example models: Nissan Kicks (or similar)
+  Seats/bags: 5 seats / 3 bags
+  Typical price: 180–260 AED/day
+  Deposit: 2000 AED
+
+- Category: Family SUV
+  Example models: Toyota Fortuner (or similar)
+  Seats/bags: 7 seats / 4 bags
+  Typical price: 320–450 AED/day
+  Deposit: 3000 AED
+
+REQUIREMENTS (demo)
+- Driver age: 21+ for Economy/Compact; 25+ for Family SUV.
+- Documents: passport + valid driver’s license.
+- International visitors: International Driving Permit (IDP) may be required depending on issuing country.
+
+INSURANCE (demo)
+- Standard CDW: included (higher excess)
+- Full cover: +45 AED/day, lowers excess and includes basic glass/tyre coverage
+
+FUEL + TOLLS (demo)
+- Fuel policy: full-to-full
+- Salik (toll): charged at cost + small admin fee per day
+
+PICKUP/DROPOFF (demo)
+- Airport pickup: available with 60 AED fee
+- One-way dropoff: available within Dubai with 80 AED fee
+
+BOOKING WORKFLOW (demo)
+- To quote accurately, confirm: pickup date/time, dropoff date/time, passenger count, luggage, and whether child seats are needed.
+- If user says "with kids" and needs space, recommend Compact SUV or Family SUV.

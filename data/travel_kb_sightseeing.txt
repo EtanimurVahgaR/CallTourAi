@@ -1,0 +1,35 @@
+CallTourAI Travel KB — Sightseeing (Dubai)
+
+Use this as a demo knowledge base for RAG queries about activities and ticketing.
+
+ATTRACTIONS (demo)
+- Burj Khalifa At The Top (Levels 124/125)
+  Best time: sunset slots sell out first
+  Ticket tip: book timed entry 2–5 days ahead in peak weeks
+  Typical duration: 1.5–2 hours
+
+- Dubai Fountain show (Downtown)
+  Cost: free viewing areas
+  Frequency: multiple evening shows
+  Tip: arrive 20–30 minutes early for front spots
+
+- Dubai Marina Dhow Cruise (dinner)
+  Duration: ~2 hours cruise + boarding time
+  Includes: buffet dinner
+  Best for: first evening, low-effort family activity
+
+- Desert safari (afternoon/evening)
+  Includes: dune bashing + camp dinner
+  Family note: confirm child ages; some operators limit very young kids for dune bashing
+
+- Museum of the Future
+  Good for: quick daytime visit
+  Tip: timed tickets; mornings are less crowded
+
+- Atlantis/Aquaventure-style waterpark day
+  Best for: kids + full-day activity
+  Tip: bring swimwear, sandals, and sunscreen
+
+SCHEDULING RULES (demo)
+- Do not stack: desert safari + late-night fountain + early morning Burj Khalifa next day.
+- If user only has 4 nights: prioritize Burj Khalifa/Dubai Mall, one desert safari, one theme/waterpark day, one cruise.

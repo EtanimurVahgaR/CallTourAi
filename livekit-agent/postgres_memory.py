@@ -33,6 +33,18 @@ class AgentRoomMemory(Base):
     )
 
 
+class UserProfile(Base):
+    __tablename__ = "calltour_user_profiles"
+
+    user_identity: Mapped[str] = mapped_column(String(255), primary_key=True)
+    memories: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
+
+    created_at: Mapped[Any] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 @dataclass(frozen=True)
 class MemoryKey:
     room_name: str
@@ -80,4 +92,41 @@ class PostgresMemoryStore:
 
         with Session(self._engine) as session:
             session.execute(stmt)
+            session.commit()
+
+    def load_profile(self, user_identity: str) -> list[dict[str, Any]]:
+        if not user_identity:
+            return []
+        with Session(self._engine) as session:
+            stmt = select(UserProfile.memories).where(UserProfile.user_identity == user_identity)
+            row = session.execute(stmt).one_or_none()
+            if not row:
+                return []
+            return list(row[0] or [])
+
+    def append_memories(self, user_identity: str, new_memories: list[dict[str, Any]]) -> None:
+        if not user_identity or not new_memories:
+            return
+
+        with Session(self._engine) as session:
+            # Load existing
+            stmt_select = select(UserProfile.memories).where(UserProfile.user_identity == user_identity)
+            row = session.execute(stmt_select).one_or_none()
+            existing = list(row[0] or []) if row else []
+            
+            # Simple append + dedupe might be needed, but for now just append
+            updated = existing + new_memories
+            
+            stmt_upsert = insert(UserProfile).values(
+                user_identity=user_identity,
+                memories=updated
+            )
+            stmt_upsert = stmt_upsert.on_conflict_do_update(
+                index_elements=[UserProfile.user_identity],
+                set_={
+                    "memories": updated,
+                    "updated_at": func.now(),
+                }
+            )
+            session.execute(stmt_upsert)
             session.commit()

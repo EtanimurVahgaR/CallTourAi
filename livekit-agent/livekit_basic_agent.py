@@ -17,6 +17,12 @@ Environment:
 
 from __future__ import annotations
 
+import sys
+import os
+
+# Add project root to sys.path so we can import 'rag' package
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime
@@ -338,16 +344,27 @@ class CallTourAssistant(Agent):
     @function_tool
     async def rag_answer(self, context: RunContext, question: str) -> str:
         """Answer a question using the repo's LangGraph RAG pipeline."""
+        q = (question or "").strip()
+        print(f"[TOOL:rag_answer] called question={q!r}", flush=True)
         try:
             from rag.graph import get_app
 
             app = get_app()
-            result = app.invoke({"question": question})
+            result = app.invoke({"question": q})
+            
+            # Debug retrieval
+            ctx = result.get("context", [])
+            print(f"[TOOL:rag_answer] retrieved {len(ctx)} chunks", flush=True)
+
             answer = (result or {}).get("answer", "")
             answer = (answer or "").strip()
-            return answer or "I don't know."
+            final_answer = answer or "I don't know."
+            print(f"[TOOL:rag_answer] response={final_answer!r}", flush=True)
+            return final_answer
         except Exception as e:
-            return f"RAG is not available right now ({type(e).__name__}: {e})."
+            msg = f"RAG is not available right now ({type(e).__name__}: {e})."
+            print(f"[TOOL:rag_answer] error={msg!r}", flush=True)
+            return msg
 
 
 async def entrypoint(ctx: agents.JobContext):
@@ -427,18 +444,39 @@ async def entrypoint(ctx: agents.JobContext):
                 await asyncio.to_thread(memory_store.ensure_schema)
 
                 saved_items = await asyncio.to_thread(memory_store.load_items, memory_key)
+                initial_item_count = len(saved_items)
+                
+                # Load User Profile (Long-term preferences)
+                user_profile_memories = []
+                if user_identity:
+                    user_profile_memories = await asyncio.to_thread(memory_store.load_profile, user_identity)
+
                 if saved_items:
                     has_saved_memory = True
                     session.history.insert(_restore_chat_items(saved_items))
 
-                memory_prompt = _build_memory_prompt(
+                # Build combined prompt
+                memory_prompt_text = _build_memory_prompt(
                     saved_items=saved_items,
                     max_messages=cfg.memory_prompt_max_messages,
                     max_chars=cfg.memory_prompt_max_chars,
                 )
+                
+                if user_profile_memories:
+                    profile_text = "\n".join([f"- [{m.get('category', 'info')}] {m.get('content', '')}" for m in user_profile_memories])
+                    memory_prompt_text = (
+                        f"{memory_prompt_text}\n\n"
+                        "KNOWN USER PREFERENCES & FACTS:\n"
+                        f"{profile_text}\n"
+                        "Uses these facts to personalize your help, but do not repeat them back unless asked."
+                    )
+
+                memory_prompt = memory_prompt_text
+                
                 print(
                     f"[memory] enabled scope={cfg.memory_scope} room={memory_key.room_name} "
-                    f"user={memory_key.user_identity or '-'} loaded_items={len(saved_items)}"
+                    f"user={memory_key.user_identity or '-'} loaded_items={len(saved_items)} "
+                    f"profile_facts={len(user_profile_memories)}"
                 )
             except Exception as e:
                 print(
@@ -469,11 +507,16 @@ async def entrypoint(ctx: agents.JobContext):
                     sanitized = _sanitize_chat_items(chat_ctx.items)
                     if cfg.memory_max_items > 0:
                         sanitized = sanitized[-cfg.memory_max_items :]
-                    await asyncio.to_thread(
-                        memory_store.upsert_items,
-                        key=memory_key,
-                        items=sanitized,
-                    )
+
+                    try:
+                        await asyncio.to_thread(
+                            memory_store.upsert_items,
+                            key=memory_key,
+                            items=sanitized,
+                        )
+                        print(f"[memory] upserted {len(sanitized)} items for {memory_key.room_name}", flush=True)
+                    except Exception as e:
+                        print(f"[memory] saving failed: {type(e).__name__}: {e}", flush=True)
 
             def schedule_flush() -> None:
                 nonlocal dirty, flush_task
@@ -513,6 +556,50 @@ async def entrypoint(ctx: agents.JobContext):
         # Wait for the active user to leave, then restart.
         await active_left.wait()
         print(f"[session] participant left ({active_identity}); restarting")
+
+        # --- MEMORY EXTRACTION START ---
+        if memory_store and active_identity and cfg.database_url:
+            try:
+                # 1. Capture conversation
+                chat_ctx = session.history.copy(exclude_function_call=True, exclude_instructions=True, exclude_empty_message=True)
+                sanitized = _sanitize_chat_items(chat_ctx.items)
+                
+                # 2. Filter for NEW messages only (to avoid re-extracting old facts)
+                # 'initial_item_count' was set when loading memory.
+                # If variable doesn't exist (e.g. memory disabled), default to 0.
+                start_idx = locals().get("initial_item_count", 0)
+                new_items = sanitized[start_idx:]
+                
+                if new_items:
+                    lines = []
+                    for it in new_items:
+                        role = it.get("role", "unknown")
+                        content = " ".join(it.get("content", []))
+                        lines.append(f"{role.upper()}: {content}")
+                    
+                    conversation_text = "\n".join(lines)
+                    
+                    if len(conversation_text) > 50: # Only extract if there's meaningful content
+                        print(f"[MemoryExtractor] Analyzing {len(new_items)} new messages for info...", flush=True)
+                        from rag.extractor import build_extractor
+                        
+                        # Run in thread to avoid blocking loop
+                        ext_graph = await asyncio.to_thread(build_extractor)
+                        result = await asyncio.to_thread(ext_graph.invoke, {"conversation_text": conversation_text})
+                        
+                        extracted = result.get("extracted_memories", [])
+                        if extracted:
+                            print(f"[MemoryExtractor] SAVING {len(extracted)} new facts: {extracted}", flush=True)
+                            await asyncio.to_thread(memory_store.append_memories, active_identity, extracted)
+                        else:
+                            print("[MemoryExtractor] No new facts found.", flush=True)
+                else:
+                    print("[MemoryExtractor] No new messages to analyze.", flush=True)
+
+            except Exception as e:
+                print(f"[MemoryExtractor] Error: {e}", flush=True)
+        # --- MEMORY EXTRACTION END ---
+
         try:
             await session.aclose()
         except Exception:

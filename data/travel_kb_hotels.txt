@@ -1,0 +1,54 @@
+CallTourAI Travel KB — Hotels (Dubai)
+
+Use this as a demo knowledge base for RAG queries about hotel selection and booking constraints.
+
+HOTEL CATALOG (example inventory)
+- Hotel: Marina Family Suites
+  Area: Dubai Marina
+  Best for: families who want walkable dining + skyline views
+  Room types: 1BR suite, 2BR suite
+  Breakfast: included in Family Saver rate
+  Pool: yes
+  Kids club: yes (ages 4–12)
+  Check-in/out: 15:00 / 12:00
+  Cancellation: free until 48h before check-in; then 1-night penalty
+  Notes: 5 min walk to tram; stroller-friendly
+
+- Hotel: Downtown View Hotel
+  Area: Downtown Dubai
+  Best for: Burj Khalifa / Dubai Mall access
+  Room types: deluxe king, family room (2 adults + 2 kids)
+  Breakfast: optional add-on
+  Pool: yes
+  Kids club: no
+  Cancellation: free until 72h before check-in; then non-refundable first night
+  Notes: ideal for fountain show evenings
+
+- Hotel: Palm Beach Resort
+  Area: Palm Jumeirah
+  Best for: beach + waterpark-style leisure
+  Room types: resort room, family suite
+  Breakfast: included
+  Pool: yes (multiple)
+  Kids club: yes
+  Cancellation: free until 7 days before check-in; then 50% of stay
+  Notes: beach cabanas available; requires taxi/ride-hail for most city sights
+
+- Hotel: Old Dubai Boutique Inn
+  Area: Al Seef / Bur Dubai
+  Best for: cultural/heritage vibe, budget-conscious couples
+  Room types: standard, superior
+  Breakfast: included (light)
+  Pool: no
+  Cancellation: free until 24h before check-in
+  Notes: close to souks and dhow cruise piers
+
+RATE GUIDANCE (rough demo pricing)
+- Mid-February family-friendly 4-star: typically 550–950 AED/night depending on area and view.
+- Weekends (Fri/Sat) are usually higher priced.
+
+BOOKING RULES (demo)
+- When user says "book", always confirm: dates, adults/children ages, bed preference, and budget range.
+- If the user requests "close to Burj Khalifa", prefer Downtown View Hotel.
+- If the user requests "beach + kids club", prefer Palm Beach Resort.
+- If the user requests "walkable nightlife and marina", prefer Marina Family Suites.
